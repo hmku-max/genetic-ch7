@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>三點測交：找出基因順序</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Source+Serif+4:ital,wght@1,600;1,700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#E8EEF0; --paper:#F9FBFC; --ink:#1C2830; --muted:#5B6972; --line:#C7D2D7;
+  --nco:#2A56A2; --nco-bg:#DBE5F6; --dco:#B22E49; --dco-bg:#F6DBE1;
+  --s1:#A86F08; --s1-bg:#F6EACB; --s2:#6A4FA0; --s2-bg:#E7E0F4;
+  --ok:#21805A; --ok-bg:#D5EEE2; --bad:#B22E49;
+  --chrom:#6A4FA0;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#121A1F; --paper:#1B252C; --ink:#E5ECEF; --muted:#9AA8B1; --line:#34434D;
+    --nco:#8CAEEC; --nco-bg:#1E3152; --dco:#EF8DA1; --dco-bg:#4A1E29;
+    --s1:#E6B653; --s1-bg:#463411; --s2:#B9A1E6; --s2-bg:#33284A;
+    --ok:#6FD0A0; --ok-bg:#163A2A; --bad:#EF8DA1; --chrom:#B9A1E6;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#121A1F; --paper:#1B252C; --ink:#E5ECEF; --muted:#9AA8B1; --line:#34434D;
+  --nco:#8CAEEC; --nco-bg:#1E3152; --dco:#EF8DA1; --dco-bg:#4A1E29;
+  --s1:#E6B653; --s1-bg:#463411; --s2:#B9A1E6; --s2-bg:#33284A;
+  --ok:#6FD0A0; --ok-bg:#163A2A; --bad:#EF8DA1; --chrom:#B9A1E6;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei","Heiti TC",system-ui,sans-serif;
+  line-height:1.6;-webkit-text-size-adjust:100%}
+.g{font-family:"Source Serif 4",Georgia,"Times New Roman",serif;font-style:italic;font-weight:700;letter-spacing:.01em}
+main{max-width:560px;margin:0 auto;padding:18px 16px 48px}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible{outline:3px solid var(--nco);outline-offset:2px}
+.hidden{display:none!important}
+
+/* home */
+.hero{padding:22px 4px 8px}
+.hero svg{width:100%;max-width:420px;height:auto;display:block;margin:0 auto 14px}
+h1{font-size:2.6rem;line-height:1.15;margin:0 0 8px;font-weight:900;letter-spacing:.02em}
+.lede{color:var(--muted);margin:0 0 22px;font-size:1.02rem}
+.btn{display:block;width:100%;text-align:left;border:2px solid var(--ink);background:var(--paper);
+  border-radius:14px;padding:14px 16px;margin:0 0 12px}
+.btn strong{display:block;font-size:1.08rem}
+.btn span{color:var(--muted);font-size:.92rem}
+.btn.primary{background:var(--ink);color:var(--paper)}
+.btn.primary span{color:var(--paper);opacity:.75}
+.rules{margin:18px 0 0;padding:14px 16px;border-left:4px solid var(--chrom);background:var(--paper);border-radius:0 12px 12px 0;font-size:.94rem}
+.rules ol{margin:6px 0 0;padding-left:1.3em}
+.rules p{margin:0}
+.note{font-size:.82rem;color:var(--muted);margin-top:14px}
+
+/* game */
+.top{display:flex;justify-content:space-between;align-items:center;font-size:.92rem;color:var(--muted);margin-bottom:10px}
+.top b{color:var(--ink)}
+.home-link{background:none;border:none;color:var(--muted);text-decoration:underline;padding:4px 0}
+.steps{display:flex;gap:6px;margin-bottom:14px}
+.steps i{flex:1;height:6px;border-radius:3px;background:var(--line)}
+.steps i.done{background:var(--ok)}
+.steps i.now{background:var(--ink)}
+.setup{background:var(--paper);border-radius:14px;padding:14px 16px;margin-bottom:14px;border:1px solid var(--line)}
+.setup .genes{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 10px}
+.chip{border:1px solid var(--line);border-radius:999px;padding:3px 12px;font-size:.92rem}
+.chip .g{font-size:1.08rem;margin-right:4px}
+.setup .cross{font-size:.92rem;color:var(--muted)}
+.tag{display:inline-block;font-size:.8rem;border-radius:6px;padding:1px 8px;background:var(--s1-bg);color:var(--s1);margin-left:6px;font-weight:700}
+
+.table{background:var(--paper);border-radius:14px;border:1px solid var(--line);overflow:hidden;margin-bottom:14px}
+.thead,.row{display:grid;grid-template-columns:1fr 1fr 1fr 1.1fr 1.6fr;align-items:center;text-align:center}
+.thead{font-size:.9rem;color:var(--muted);padding:8px 6px;border-bottom:1px solid var(--line)}
+.thead .g{color:var(--ink);font-size:1.05rem}
+.row{width:100%;border:none;border-top:1px solid var(--line);background:transparent;padding:9px 6px;font-size:1.12rem;min-height:46px;transition:background .15s}
+.row:first-of-type{border-top:none}
+.row .n{font-variant-numeric:tabular-nums;font-weight:700}
+.row .lab{font-size:.78rem;font-weight:700}
+.row.sel{background:var(--ink);color:var(--paper)}
+.row.nco{background:var(--nco-bg);color:var(--nco)}
+.row.dco{background:var(--dco-bg);color:var(--dco)}
+.row.s1{background:var(--s1-bg);color:var(--s1)}
+.row.s2{background:var(--s2-bg);color:var(--s2)}
+.row:disabled{cursor:default}
+.row .allele.wt{opacity:.55}
+.row.sel .allele.wt{opacity:.7}
+
+.ask{background:var(--paper);border-radius:14px;border:2px solid var(--ink);padding:14px 16px}
+.ask h2{font-size:1.1rem;margin:0 0 4px}
+.ask .sub{color:var(--muted);font-size:.92rem;margin:0 0 12px}
+.opts{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.opt{border:2px solid var(--line);background:var(--bg);border-radius:12px;padding:12px 8px;font-size:1.1rem;font-weight:700}
+.opt.right{border-color:var(--ok);background:var(--ok-bg);color:var(--ok)}
+.opt.wrong{border-color:var(--bad);color:var(--bad);text-decoration:line-through}
+.opt:disabled{cursor:default}
+.opt.picked{border-color:var(--ink);background:var(--ink);color:var(--paper)}
+.go{width:100%;border:none;border-radius:12px;padding:13px;background:var(--ink);color:var(--paper);font-weight:700;font-size:1.02rem;margin-top:12px}
+.go:disabled{opacity:.35;cursor:default}
+.fb{margin-top:12px;padding:10px 12px;border-radius:10px;font-size:.95rem}
+.fb.good{background:var(--ok-bg);color:var(--ink);border-left:4px solid var(--ok)}
+.fb.hint{background:var(--dco-bg);color:var(--ink);border-left:4px solid var(--bad)}
+.fb.show{background:var(--s1-bg);color:var(--ink);border-left:4px solid var(--s1)}
+.fb b.pts{float:right;color:var(--ok)}
+.calc{display:block;margin-top:6px;font-variant-numeric:tabular-nums}
+
+.map{margin:4px 0 10px}
+.map svg{width:100%;height:auto;display:block}
+.summary{font-size:.95rem}
+.summary ul{padding-left:1.2em;margin:6px 0}
+
+.final{text-align:center;padding:30px 4px}
+.final .big{font-size:3.6rem;font-weight:900;line-height:1}
+.final .of{color:var(--muted)}
+.final .msg{margin:14px 0 22px}
+.final{padding-top:20px}
+.fld{display:block;font-weight:700;margin:0 0 12px}
+.fld input{display:block;width:100%;margin-top:6px;padding:12px;border:2px solid var(--line);border-radius:10px;font:inherit;font-size:16px;font-weight:500;background:var(--bg);color:var(--ink)}
+.fld input:focus{outline:none;border-color:var(--ink)}
+.who{background:var(--paper);border:2px solid var(--ink);border-radius:12px;padding:12px 16px;margin-bottom:20px;text-align:left;font-size:1rem;line-height:1.8}
+
+@media (prefers-reduced-motion: reduce){ .row{transition:none} }
+@media (min-width:600px){ h1{font-size:3rem} }
+</style>
+</head>
+<body>
+<main>
+
+<!-- HOME -->
+<section id="home">
+  <div class="hero">
+    <svg viewBox="0 0 420 120" aria-hidden="true">
+      <rect x="20" y="30" width="380" height="22" rx="11" fill="var(--chrom)" opacity=".22"/>
+      <rect x="20" y="70" width="380" height="22" rx="11" fill="var(--chrom)" opacity=".10" stroke="var(--chrom)" stroke-opacity=".35"/>
+      <g fill="var(--chrom)"><rect x="84" y="30" width="10" height="22"/><rect x="198" y="30" width="10" height="22"/><rect x="326" y="30" width="10" height="22"/></g>
+      <g fill="var(--chrom)" opacity=".45"><rect x="84" y="70" width="10" height="22"/><rect x="198" y="70" width="10" height="22"/><rect x="326" y="70" width="10" height="22"/></g>
+      <path d="M140 52 L260 70 M140 70 L260 52" stroke="var(--dco)" stroke-width="3" stroke-linecap="round" fill="none"/>
+      <g font-family="Source Serif 4, Georgia, serif" font-style="italic" font-weight="700" font-size="20" fill="var(--ink)" text-anchor="middle">
+        <text x="89" y="20">?</text><text x="203" y="20">?</text><text x="331" y="20">?</text>
+      </g>
+    </svg>
+    <h1>三點測交</h1>
+    <p class="lede">從測交子代的 8 種表型，找出三個連鎖基因的順序，再算出它們之間的距離。</p>
+  </div>
+  <button class="btn primary" id="startRand"><strong>開始測驗</strong><span>2 題，每次題目都不同；第 2 題的親本型不一定是全隱性</span></button>
+  <div class="rules">
+    <p>每一題有 5 個步驟：</p>
+    <ol>
+      <li>找出親本型（NCO）</li>
+      <li>找出雙交叉型（DCO）</li>
+      <li>判斷哪個基因在中間</li>
+      <li>算出第一段距離</li>
+      <li>算出第二段距離</li>
+    </ol>
+    <p style="margin-top:6px">每一步 20 分，只能作答一次。作答過程不提示對錯，全部 2 題交卷後才顯示分數。</p>
+  </div>
+  <p class="note" id="bestNote"></p>
+  <p class="note">題目數字是程式依連鎖模型模擬產生，基因組合僅供練習，不代表真實的果蠅圖譜。</p>
+</section>
+
+<!-- GAME -->
+<section id="game" class="hidden">
+  <div class="top"><span id="roundInfo"></span><span>每步 20 分</span></div>
+  <div class="steps" id="steps"></div>
+  <div class="setup" id="setup"></div>
+  <div class="table" id="table"></div>
+  <div class="ask" id="ask"></div>
+  <p style="text-align:center;margin-top:16px"><button class="home-link" id="quit">回首頁</button></p>
+</section>
+
+<!-- FINAL -->
+<section id="final" class="hidden">
+  <div id="idForm" class="ask" style="margin-top:20px">
+    <h2>交卷完成</h2>
+    <p class="sub">請填寫學號和姓名後查看成績，成績畫面請截圖交給老師。</p>
+    <label class="fld">學號<input id="sid" autocomplete="off" autocapitalize="characters"></label>
+    <label class="fld">姓名<input id="sname" autocomplete="off"></label>
+    <button class="go" id="showScore" disabled>查看成績</button>
+  </div>
+  <div class="final hidden" id="result">
+    <div class="who" id="who"></div>
+    <div class="big" id="finalScore">0</div>
+    <div class="of" id="finalOf"></div>
+    <p class="msg" id="finalMsg"></p>
+    <div class="rules" id="perQ" style="text-align:left;margin:0 0 22px"></div>
+    <button class="btn" id="toHome"><strong>回首頁</strong><span>回到說明頁</span></button>
+  </div>
+</section>
+
+</main>
+<script>
+(function(){
+const $=s=>document.querySelector(s);
+const rand=n=>Math.floor(Math.random()*n);
+const r1=x=>Math.round(x*10)/10;
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=rand(i+1);[a[i],a[j]]=[a[j],a[i]];}return a;}
+
+const GENE_POOL=[['y','黃體'],['w','白眼'],['ec','粗糙眼'],['ct','缺刻翅'],['sn','焦剛毛'],['v','朱紅眼'],
+  ['m','小翅'],['f','叉剛毛'],['b','黑體'],['pr','紫眼'],['vg','殘翅'],['cn','辰砂眼'],['cv','無橫脈翅'],['se','烏木眼']];
+
+/* 課本例題 7-3：顯示順序 pr, corr, b；真實順序 pr – b – corr */
+function exampleProblem(){
+  return prep({
+    genes:[['pr','紫眼'],['corr','皺翅'],['b','黑體']],
+    order:[0,2,1], N:1652, mixed:false, example:true,
+    rows:[
+      {a:[1,1,1],n:669,t:'NCO'},{a:[0,0,0],n:683,t:'NCO'},
+      {a:[1,0,0],n:49,t:'S1'},{a:[0,1,1],n:54,t:'S1'},
+      {a:[1,0,1],n:96,t:'S2'},{a:[0,1,0],n:100,t:'S2'},
+      {a:[1,1,0],n:1,t:'DCO'},{a:[0,0,1],n:0,t:'DCO'}
+    ]
+  });
+}
+
+function randomProblem(mixed){
+  const genes=shuffle(GENE_POOL.slice()).slice(0,3);
+  const order=shuffle([0,1,2]);
+  let h1=[1,1,1];
+  if(mixed){const pats=[[1,0,1],[0,1,0],[1,1,0],[0,0,1],[1,0,0],[0,1,1]];h1=pats[rand(6)];}
+  const h2=h1.map(x=>1-x);
+  for(let guard=0;guard<500;guard++){
+    const N=1000;
+    const d1=4+Math.random()*18, d2=6+Math.random()*19;
+    if(Math.abs(d1-d2)<2.5) continue;
+    const c=0.25+Math.random()*0.6;
+    const pD=c*d1*d2/10000, p1=d1/100-pD, p2=d2/100-pD;
+    const n1=Math.round(N*p1), n2=Math.round(N*p2), nD=Math.round(N*pD);
+    const nN=N-n1-n2-nD;
+    if(nD<1||nD*3>Math.min(n1,n2)) continue;
+    const split=t=>{const f=0.5+(Math.random()-0.5)*0.14;const x=Math.round(t*f);return [x,t-x];};
+    const [a,b]=split(nN),[c1,c2]=split(n1),[e1,e2]=split(n2);
+    const [f1,f2]=nD===1?shuffle([1,0]):split(nD);
+    if(Math.min(a,b)<=Math.max(c1,c2,e1,e2)) continue;
+    if(Math.min(c1,c2,e1,e2)<=Math.max(f1,f2)) continue;
+    const pos={
+      NCO:[h1,h2],
+      S1:[[h1[0],h2[1],h2[2]],[h2[0],h1[1],h1[2]]],
+      S2:[[h1[0],h1[1],h2[2]],[h2[0],h2[1],h1[2]]],
+      DCO:[[h1[0],h2[1],h1[2]],[h2[0],h1[1],h2[2]]]
+    };
+    const cnt={NCO:[a,b],S1:[c1,c2],S2:[e1,e2],DCO:[f1,f2]};
+    const rows=[];
+    for(const t of ['NCO','S1','S2','DCO']){
+      for(let k=0;k<2;k++){
+        const disp=[0,0,0];pos[t][k].forEach((v,i)=>{disp[order[i]]=v;});
+        rows.push({a:disp,n:cnt[t][k],t});
+      }
+    }
+    return prep({genes,order,N,mixed,example:false,rows});
+  }
+  return randomProblem(mixed);
+}
+
+function prep(p){
+  const sum=t=>p.rows.filter(r=>r.t===t).reduce((s,r)=>s+r.n,0);
+  p.nN=sum('NCO');p.n1=sum('S1');p.n2=sum('S2');p.nD=sum('DCO');
+  p.d1=r1((p.n1+p.nD)/p.N*100);p.d2=r1((p.n2+p.nD)/p.N*100);
+  p.view=shuffle(p.rows.map((_,i)=>i));
+  p.labels={};
+  return p;
+}
+
+/* session */
+let S=null,P=null,step=0,sel=[],pick=null;
+const QTEXT=['步驟一：點選親本型（NCO）的兩列','步驟二：點選雙交叉型（DCO）的兩列'];
+const QSUB=['沒有發生交叉的子代。','兩個區段同時發生交叉的子代。'];
+
+function startSession(){
+  S={idx:0,score:0,list:[],per:[],time:[],t0:Date.now()};S.qStart=S.t0;
+  for(let i=0;i<2;i++) S.list.push(randomProblem(i>=1));
+  S.max=S.list.length*100;
+  show('game');loadRound();
+}
+function show(id){['home','game','final'].forEach(s=>$('#'+s).classList.toggle('hidden',s!==id));window.scrollTo(0,0);}
+function loadRound(){P=S.list[S.idx];P.opts={};step=0;sel=[];pick=null;S.per[S.idx]=0;renderSetup();render();}
+
+const gs=i=>`<span class="g">${P.genes[i][0]}</span>`;
+const L=()=>P.order[0], M=()=>P.order[1], R=()=>P.order[2];
+
+function renderSetup(){
+  $('#roundInfo').innerHTML=`第 <b>${S.idx+1}</b> / ${S.list.length} 題`;
+  const chips=P.genes.map(g=>`<span class="chip"><span class="g">${g[0]}</span>${g[1]}</span>`).join('');
+  $('#setup').innerHTML=`<div>三個隱性突變基因${P.mixed?'<span class="tag">親本型不一定是全隱性</span>':''}</div>
+    <div class="genes">${chips}</div>
+    <div class="cross">F1 雌蠅（三基因異型合子）× 隱性純合雄蠅，測交子代共 <b>${P.N}</b> 隻。表格中「+」代表野生型。</div>`;
+}
+
+function renderTable(){
+  const head=`<div class="thead">${P.genes.map((g,i)=>`<div>${gs(i)}</div>`).join('')}<div>隻數</div><div></div></div>`;
+  const pickable=step<=1;
+  const rows=P.view.map(ri=>{
+    const r=P.rows[ri], on=sel.includes(ri);
+    const cells=r.a.map((v,i)=>v?`<div class="allele"><span class="g">${P.genes[i][0]}</span></div>`:`<div class="allele wt">+</div>`).join('');
+    return `<button class="row${on?' sel':''}" data-ri="${ri}" ${pickable?'':'disabled'} aria-pressed="${on}">${cells}<div class="n">${r.n}</div><div class="lab">${on?'已選':''}</div></button>`;
+  }).join('');
+  $('#table').innerHTML=head+rows;
+  $('#table').querySelectorAll('.row').forEach(b=>b.addEventListener('click',()=>toggleRow(+b.dataset.ri)));
+}
+
+function renderSteps(){
+  $('#steps').innerHTML=[0,1,2,3,4].map(i=>`<i class="${i<step?'done':i===step?'now':''}"></i>`).join('');
+}
+
+function isLast(){return S.idx===S.list.length-1&&step===4;}
+function goBtn(enabled){return `<button class="go" id="confirm" ${enabled?'':'disabled'}>${isLast()?'交卷':'確認作答'}</button>`;}
+
+function render(){
+  renderSteps();renderTable();
+  const a=$('#ask');
+  if(step<=1){
+    a.innerHTML=`<h2>${QTEXT[step]}</h2><p class="sub">${QSUB[step]}已選 <span id="cnt">${sel.length}</span> / 2 列</p>${goBtn(sel.length===2)}`;
+  } else {
+    let title,sub,opts,cols='1fr 1fr';
+    if(step===2){
+      title='步驟三：哪一個基因在中間？';sub='比對親本型和雙交叉型來判斷。';
+      opts=[0,1,2].map(i=>({v:i,h:gs(i)}));cols='1fr 1fr 1fr';
+    } else {
+      const first=step===3, g1=first?L():M(), g2=first?M():R();
+      if(!P.opts[step]) P.opts[step]=distOpts(first?P.d1:P.d2, first?P.n1:P.n2, first?P.d2:P.d1);
+      title=`步驟${first?'四':'五'}：${gs(g1)} 和 ${gs(g2)} 相距多少 cM？`;sub='選一個答案。';
+      opts=P.opts[step].map(v=>({v,h:v.toFixed(1)+' cM'}));
+    }
+    a.innerHTML=`<h2>${title}</h2><p class="sub">${sub}</p>
+      <div class="opts" style="grid-template-columns:${cols}">${opts.map(o=>`<button class="opt" data-v="${o.v}" aria-pressed="false">${o.h}</button>`).join('')}</div>${goBtn(false)}`;
+    a.querySelectorAll('.opt').forEach(b=>b.addEventListener('click',()=>{
+      a.querySelectorAll('.opt').forEach(x=>{x.classList.remove('picked');x.setAttribute('aria-pressed','false');});
+      b.classList.add('picked');b.setAttribute('aria-pressed','true');pick=+b.dataset.v;$('#confirm').disabled=false;
+    }));
+  }
+  $('#confirm').addEventListener('click',submit);
+}
+
+function distOpts(correct,sco,other){
+  const cand=[correct,r1(sco/P.N*100),other,r1(correct+other)];
+  const out=[];
+  for(const v of cand){if(v>0&&!out.some(x=>Math.abs(x-v)<1e-9)) out.push(v);}
+  let g=0;
+  while(out.length<4&&g++<100){const v=r1(correct+(Math.random()<.5?-1:1)*(1+Math.random()*4));if(v>0&&!out.some(x=>Math.abs(x-v)<1e-9)) out.push(v);}
+  return shuffle(out.slice(0,4));
+}
+
+function toggleRow(ri){
+  if(step>1) return;
+  const i=sel.indexOf(ri);
+  if(i>=0) sel.splice(i,1); else if(sel.length<2) sel.push(ri); else {sel.shift();sel.push(ri);}
+  renderTable();
+  $('#cnt').textContent=sel.length;
+  $('#confirm').disabled=sel.length!==2;
+}
+
+function submit(){
+  let ok=false;
+  if(step<=1){
+    if(sel.length!==2) return;
+    const t=step===0?'NCO':'DCO';ok=sel.every(i=>P.rows[i].t===t);
+  } else {
+    if(pick===null) return;
+    if(step===2) ok=pick===M();
+    else ok=Math.abs(pick-(step===3?P.d1:P.d2))<1e-9;
+  }
+  if(ok){S.score+=20;S.per[S.idx]+=20;}
+  sel=[];pick=null;step++;
+  if(step<5){render();$('#ask').scrollIntoView({behavior:'auto',block:'nearest'});return;}
+  S.time[S.idx]=Date.now()-S.qStart;S.qStart=Date.now();
+  if(S.idx<S.list.length-1){S.idx++;loadRound();window.scrollTo(0,0);} else finish();
+}
+
+function getBest(k){try{return +(localStorage.getItem(k)||0);}catch(e){return 0;}}
+function setBest(k,v){try{localStorage.setItem(k,String(v));}catch(e){}}
+
+const fmt=ms=>{const s=Math.round(ms/1000);return s>=60?`${Math.floor(s/60)} 分 ${s%60} 秒`:`${s} 秒`;};
+const pad=n=>String(n).padStart(2,'0');
+const esc=t=>t.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function finish(){
+  const end=new Date();S.end=end;S.total=end-S.t0;
+  const k='tpc-best-2q', best=Math.max(getBest(k),S.score);setBest(k,best);
+  $('#finalScore').textContent=S.score;
+  $('#finalOf').textContent=`滿分 ${S.max}`;
+  const r=S.score/S.max;
+  $('#finalMsg').textContent=r>=.9?'三點測交的步驟都很熟練了。':r>=.6?'大方向掌握了，還有部分步驟需要加強。':'建議回去看一次三點測交短影片複習。';
+  $('#perQ').innerHTML='<p>各題結果</p><ol>'+S.per.map((s,i)=>`<li>${s} / 100 分，用時 ${fmt(S.time[i])}</li>`).join('')+'</ol>';
+  $('#sid').value='';$('#sname').value='';$('#showScore').disabled=true;
+  $('#idForm').classList.remove('hidden');$('#result').classList.add('hidden');
+  show('final');updateBest();
+}
+function revealScore(){
+  const id=$('#sid').value.trim(),nm=$('#sname').value.trim();if(!id||!nm)return;
+  const e=S.end;
+  $('#who').innerHTML=`<div>學號：<b>${esc(id)}</b></div><div>姓名：<b>${esc(nm)}</b></div><div>完成時間：${e.getFullYear()}/${pad(e.getMonth()+1)}/${pad(e.getDate())} ${pad(e.getHours())}:${pad(e.getMinutes())}</div><div>總作答時間：<b>${fmt(S.total)}</b></div>`;
+  $('#idForm').classList.add('hidden');$('#result').classList.remove('hidden');window.scrollTo(0,0);
+}
+function updateBest(){
+  const r=getBest('tpc-best-2q');
+  $('#bestNote').textContent=r?`最佳紀錄：${r} / 200`:'';
+}
+
+$('#startRand').addEventListener('click',startSession);
+['#sid','#sname'].forEach(s=>$(s).addEventListener('input',()=>{$('#showScore').disabled=!($('#sid').value.trim()&&$('#sname').value.trim());}));
+$('#showScore').addEventListener('click',revealScore);
+$('#toHome').addEventListener('click',()=>{show('home');updateBest();});
+$('#quit').addEventListener('click',()=>{ if(confirm('確定要離開嗎？這次的作答不會保留。')){show('home');updateBest();} });
+updateBest();
+})();
+</script>
+</body>
+</html>
