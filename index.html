@@ -126,6 +126,16 @@ h1{font-size:2.6rem;line-height:1.15;margin:0 0 8px;font-weight:900;letter-spaci
 
 @media (prefers-reduced-motion: reduce){ .row{transition:none} }
 @media (min-width:600px){ h1{font-size:3rem} }
+.timer{position:sticky;top:0;z-index:5;background:var(--bg);padding:8px 0;display:flex;align-items:center;gap:10px;margin:0 0 4px;font-weight:700;font-variant-numeric:tabular-nums}
+.timer .tbar{flex:1;height:12px;border-radius:6px;background:var(--line);overflow:hidden}
+.timer .tbar i{display:block;height:100%;width:100%;background:var(--ink);transition:width .2s linear}
+.timer span.tl{min-width:4.2em;text-align:right}
+.timer.low{color:var(--bad)}
+.timer.low .tbar i{background:var(--bad)}
+.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);background:var(--ink);color:var(--paper);padding:12px 18px;border-radius:12px;font-weight:700;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:10;max-width:calc(100% - 32px);text-align:center}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+.who .warn{color:var(--bad);font-size:1.15rem}
+@media (prefers-reduced-motion: reduce){.timer .tbar i,.toast{transition:none}}
 </style>
 </head>
 <body>
@@ -158,6 +168,7 @@ h1{font-size:2.6rem;line-height:1.15;margin:0 0 8px;font-weight:900;letter-spaci
       <li>算出第二段距離</li>
     </ol>
     <p style="margin-top:6px">每一步 20 分，只能作答一次。作答過程不提示對錯，全部 2 題交卷後才顯示分數。</p>
+    <p style="margin-top:6px"><b>每一步都有時間限制</b>，時間到自動以答錯計算。作答中切換到其他 App 或分頁，會被記錄在成績頁。</p>
   </div>
   <p class="note" id="bestNote"></p>
   <p class="note">題目數字是程式依連鎖模型模擬產生，基因組合僅供練習，不代表真實的果蠅圖譜。</p>
@@ -167,6 +178,7 @@ h1{font-size:2.6rem;line-height:1.15;margin:0 0 8px;font-weight:900;letter-spaci
 <section id="game" class="hidden">
   <div class="top"><span id="roundInfo"></span><span>每步 20 分</span></div>
   <div class="steps" id="steps"></div>
+  <div class="timer" id="timer"><div class="tbar"><i id="tfill"></i></div><span class="tl">剩 <span id="tleft">0</span> 秒</span></div>
   <div class="setup" id="setup"></div>
   <div class="table" id="table"></div>
   <div class="ask" id="ask"></div>
@@ -193,6 +205,7 @@ h1{font-size:2.6rem;line-height:1.15;margin:0 0 8px;font-weight:900;letter-spaci
 </section>
 
 </main>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script>
 (function(){
 const $=s=>document.querySelector(s);
@@ -265,13 +278,39 @@ function prep(p){
   return p;
 }
 
+/* guard: 限時與離開頁面偵測 */
+const G={leaves:0,timeouts:0,away:false,active:false,tid:null,deadline:0,sec:0,cb:null};
+function gReset(){G.leaves=0;G.timeouts=0;G.away=false;G.active=true;}
+function markLeave(){if(!G.active||G.away)return;G.away=true;G.leaves++;}
+function markBack(){if(!G.away)return;G.away=false;if(G.active)toast(`已記錄：離開頁面 ${G.leaves} 次`);}
+document.addEventListener('visibilitychange',()=>{document.hidden?markLeave():markBack();});
+window.addEventListener('blur',markLeave);
+window.addEventListener('focus',markBack);
+window.addEventListener('pagehide',markLeave);
+let toastT=null;
+function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('on');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('on'),2600);}
+function startTimer(sec,cb){stopTimer();G.sec=sec;G.deadline=Date.now()+sec*1000;G.cb=cb;tick();G.tid=setInterval(tick,200);}
+function stopTimer(){if(G.tid)clearInterval(G.tid);G.tid=null;}
+function tick(){
+  const left=Math.max(0,G.deadline-Date.now()),f=$('#tfill');
+  f.style.width=(left/(G.sec*1000)*100)+'%';
+  const s=Math.ceil(left/1000);$('#tleft').textContent=s;
+  $('#timer').classList.toggle('low',s<=5);
+  if(left<=0){stopTimer();G.timeouts++;toast('時間到，此題以答錯計算');const cb=G.cb;G.cb=null;cb&&cb();}
+}
+function gEnd(){stopTimer();G.active=false;}
+function guardLines(){
+  const lv=G.leaves>0?`<div class="warn">離開頁面：<b>${G.leaves} 次</b></div>`:`<div>離開頁面：<b>0 次</b></div>`;
+  return lv+`<div>逾時：<b>${G.timeouts}</b> 步</div>`;
+}
+
 /* session */
 let S=null,P=null,step=0,sel=[],pick=null;
 const QTEXT=['步驟一：點選親本型（NCO）的兩列','步驟二：點選雙交叉型（DCO）的兩列'];
 const QSUB=['沒有發生交叉的子代。','兩個區段同時發生交叉的子代。'];
 
 function startSession(){
-  S={idx:0,score:0,list:[],per:[],time:[],t0:Date.now()};S.qStart=S.t0;
+  S={idx:0,score:0,list:[],per:[],time:[],t0:Date.now()};S.qStart=S.t0;gReset();
   for(let i=0;i<2;i++) S.list.push(randomProblem(i>=1));
   S.max=S.list.length*100;
   show('game');loadRound();
@@ -332,8 +371,10 @@ function render(){
       b.classList.add('picked');b.setAttribute('aria-pressed','true');pick=+b.dataset.v;$('#confirm').disabled=false;
     }));
   }
-  $('#confirm').addEventListener('click',submit);
+  $('#confirm').addEventListener('click',()=>submit(false));
+  startTimer(STEP_SEC[step],()=>submit(true));
 }
+const STEP_SEC=[20,15,15,25,25];
 
 function distOpts(correct,sco,other){
   const cand=[correct,r1(sco/P.N*100),other,r1(correct+other)];
@@ -353,9 +394,10 @@ function toggleRow(ri){
   $('#confirm').disabled=sel.length!==2;
 }
 
-function submit(){
+function submit(to){
   let ok=false;
-  if(step<=1){
+  if(to===true){ok=false;}
+  else if(step<=1){
     if(sel.length!==2) return;
     const t=step===0?'NCO':'DCO';ok=sel.every(i=>P.rows[i].t===t);
   } else {
@@ -377,6 +419,7 @@ const fmt=ms=>{const s=Math.round(ms/1000);return s>=60?`${Math.floor(s/60)} 分
 const pad=n=>String(n).padStart(2,'0');
 const esc=t=>t.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function finish(){
+  gEnd();
   const end=new Date();S.end=end;S.total=end-S.t0;
   const k='tpc-best-2q', best=Math.max(getBest(k),S.score);setBest(k,best);
   $('#finalScore').textContent=S.score;
@@ -391,7 +434,7 @@ function finish(){
 function revealScore(){
   const id=$('#sid').value.trim(),nm=$('#sname').value.trim();if(!id||!nm)return;
   const e=S.end;
-  $('#who').innerHTML=`<div>學號：<b>${esc(id)}</b></div><div>姓名：<b>${esc(nm)}</b></div><div>完成時間：${e.getFullYear()}/${pad(e.getMonth()+1)}/${pad(e.getDate())} ${pad(e.getHours())}:${pad(e.getMinutes())}</div><div>總作答時間：<b>${fmt(S.total)}</b></div>`;
+  $('#who').innerHTML=`<div>學號：<b>${esc(id)}</b></div><div>姓名：<b>${esc(nm)}</b></div><div>完成時間：${e.getFullYear()}/${pad(e.getMonth()+1)}/${pad(e.getDate())} ${pad(e.getHours())}:${pad(e.getMinutes())}</div><div>總作答時間：<b>${fmt(S.total)}</b></div>${guardLines()}`;
   $('#idForm').classList.add('hidden');$('#result').classList.remove('hidden');window.scrollTo(0,0);
 }
 function updateBest(){
@@ -403,7 +446,7 @@ $('#startRand').addEventListener('click',startSession);
 ['#sid','#sname'].forEach(s=>$(s).addEventListener('input',()=>{$('#showScore').disabled=!($('#sid').value.trim()&&$('#sname').value.trim());}));
 $('#showScore').addEventListener('click',revealScore);
 $('#toHome').addEventListener('click',()=>{show('home');updateBest();});
-$('#quit').addEventListener('click',()=>{ if(confirm('確定要離開嗎？這次的作答不會保留。')){show('home');updateBest();} });
+$('#quit').addEventListener('click',()=>{ const was=G.active;G.active=false; if(confirm('確定要離開嗎？這次的作答不會保留。')){gEnd();show('home');updateBest();} else G.active=was; });
 updateBest();
 })();
 </script>
